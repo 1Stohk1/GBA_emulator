@@ -491,6 +491,13 @@ int cpu_step_thumb(ARM7TDMI *cpu) {
     }
   }
 
+  // Format 17: Software Interrupt (SWI)
+  if ((instruction & 0xFF00) == 0xDF00) {
+      u8 swi_comment = instruction & 0xFF;
+      printf("[CPU] SWI (Thumb) #%02X at PC=%08X\n", swi_comment, cpu->r[REG_PC]-2);
+      return 1; 
+  }
+
   return 1; // Default Data Processing
 
   // Format 9: Load/Store with Expected Immediate Offset (011...)

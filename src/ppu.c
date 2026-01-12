@@ -36,7 +36,20 @@ void ppu_update(int cycles) {
     // VBlank is lines 160-227
     u16 *dispstat = (u16 *)&io[4];
     if (vcount >= 160 && vcount <= 227) {
-      *dispstat |= 1; // Set VBlank
+      if (!(*dispstat & 1)) { // Rising Edge of VBlank
+          *dispstat |= 1; // Set VBlank Status
+          
+          // Trigger VBlank IRQ in IF (0x04000202)
+          // IF is at offset 0x202 in IO
+          u8 *io_base = memory_get_io();
+          u16 *if_reg = (u16 *)&io_base[0x202];
+          *if_reg |= 1; // Set Bit 0 (VBlank)
+          
+          // Also set in BIOS/WRAM mirror if needed? 
+          // (Usually 0x03007FF8 IntFlags, but that's handled by BIOS ISR.
+          // Since we have no BIOS, games reading IO directly should work.
+          // If games rely on BIOS to copy IF to 0x0300xxxx, we might need more Hacks.)
+      }
     } else {
       *dispstat &= ~1; // Clear VBlank
     }
@@ -151,6 +164,146 @@ void ppu_render_scanline_mode0(u32 *scanline_buffer, int line) {
     }
 }
 
+void ppu_render_oam(u32 *scanline_buffer, int line) {
+    u8 *io = memory_get_io();
+    u16 dispcnt = *(u16 *)&io[0];
+    
+    // Check if OBJ (Bit 12) is enabled
+    if (!(dispcnt & 0x1000)) return;
+
+    u8 *oam = memory_get_oam();
+    u8 *vram = memory_get_vram(); // OBJ Tiles are at 0x06010000 (Offset 0x10000 in VRAM)
+    u8 *obj_vram = vram + 0x10000;
+    u16 *pal = (u16 *)memory_get_pal(); // OBJ Palette is at 0x05000200 (Offset 0x200 in PAL RAM?)
+    // Actually memory_get_pal returns base of 0x05000000. OBJ Pal starts at +0x200.
+    u16 *obj_pal = pal + 0x100; // 0x200 bytes / 2 = 0x100 shorts
+
+    // Iterate 128 sprites
+    for (int i = 0; i < 128; i++) {
+        u16 attr0 = *(u16 *)&oam[i * 8 + 0];
+        u16 attr1 = *(u16 *)&oam[i * 8 + 2];
+        u16 attr2 = *(u16 *)&oam[i * 8 + 4];
+
+        // Attribute 0: Y Coordinate, Shape, Color Mode, Mosaic, Double Size, Disable
+        int y = attr0 & 0xFF;
+        int rot_scale_flag = (attr0 >> 8) & 1;
+        int double_size = (attr0 >> 9) & 1; // Only if Rot/Scale on
+        int mode = (attr0 >> 10) & 3; // 0=Normal, 1=Semi-Trans, 2=Obj Window
+        int mosaic = (attr0 >> 12) & 1;
+        int color_mode = (attr0 >> 13) & 1; // 0=16/16 (4bpp), 1=256/1 (8bpp)
+        int shape = (attr0 >> 14) & 3; // 0=Square, 1=Wide, 2=Tall
+
+        // Attribute 1: X Coordinate, Rot/Scale Param / Flip
+        int x = attr1 & 0x1FF;
+        int flip_h = 0;
+        int flip_v = 0;
+        
+        if (!rot_scale_flag) {
+             flip_h = (attr1 >> 12) & 1;
+             flip_v = (attr1 >> 13) & 1;
+        }
+
+        // Attribute 2: Tile Index, Priority, Palette Bank
+        int tile_index = attr2 & 0x3FF;
+        int priority = (attr2 >> 10) & 3;
+        int pal_bank = (attr2 >> 12) & 0xF;
+        
+        (void)priority;
+        (void)mosaic;
+        (void)double_size;
+
+        // Simplify: Only standard sprites, no rot/scale yet.
+        if (mode == 2) continue; // Skip OBJ Window
+        if (rot_scale_flag) continue; // Skip Rot/Scale for now (too complex for step 1)
+
+        // Calculate size (Width/Height) based on Shape & Size
+        // Size bits in Attr1 (14-15)
+        int size = (attr1 >> 14) & 3;
+        int width = 8, height = 8;
+        
+        // Lookup table logic (simplified):
+        // Shape 0 (Square): 8, 16, 32, 64
+        // Shape 1 (Wide): 16x8, 32x8, 32x16, 64x32
+        // Shape 2 (Tall): 8x16, 8x32, 16x32, 32x64
+        if (shape == 0) {
+            int dim = 8 << size; width = dim; height = dim;
+        } else if (shape == 1) {
+            if (size==0) { width=16; height=8; }
+            else if (size==1) { width=32; height=8; }
+            else if (size==2) { width=32; height=16; }
+            else { width=64; height=32; }
+        } else if (shape == 2) {
+            if (size==0) { width=8; height=16; }
+            else if (size==1) { width=8; height=32; }
+            else if (size==2) { width=16; height=32; }
+            else { width=32; height=64; }
+        }
+        
+        // Wrap Y
+        if (y >= 160) y -= 256; 
+        
+        // Check visibility on current line
+        if (line >= y && line < (y + height)) {
+            // Visible on this line
+            int sprite_y = line - y;
+            if (flip_v) sprite_y = height - 1 - sprite_y;
+
+            // Render loop logic for row
+            for (int sx = 0; sx < width; sx++) {
+                int screen_x = x + sx;
+                if (screen_x >= 512) screen_x -= 512; // Wrap X? usually 240
+                if (screen_x < 0 || screen_x >= GBA_SCREEN_WIDTH) continue;
+
+                int sprite_x = sx;
+                if (flip_h) sprite_x = width - 1 - sx;
+
+                // Fetch Pixel
+                // 4bpp: 32 bytes per tile. 8x8 pixels per tile.
+                // 8bpp: 64 bytes per tile.
+                // Tile Mapping: 1D or 2D. Default 1D? Bit 6 of DISPCNT is 1D/2D.
+                // Assuming 1D mapping for simplicity.
+                int tile_y = sprite_y / 8;
+                int tile_x_offset = sprite_x / 8;
+                int local_y = sprite_y % 8;
+                int local_x = sprite_x % 8;
+                
+                int current_tile = tile_index; 
+                // In 1D mode, tiles are linear.
+                // In 4bpp, each "tile increment" is 32 bytes.
+                // Width in tiles depends on shape.
+                // Stride logic is complex.
+                // Let's assume basic linear check:
+                // Tile ID = Base + TileY * Stride + TileX
+                // For 1D: TileID simply increments.
+                
+                // Simplified 1D Mapping:
+                int stride = width / 8;
+                if (color_mode == 0) { // 4bpp
+                    current_tile += (tile_y * stride) + tile_x_offset; 
+                } else { // 8bpp
+                   current_tile += ((tile_y * stride) + tile_x_offset) * 2;
+                }
+
+                u32 tile_addr = current_tile * 32;
+                if (color_mode == 0) { // 4bpp
+                     u8 input_byte = obj_vram[tile_addr + (local_y * 4) + (local_x / 2)];
+                     u8 index = (local_x & 1) ? (input_byte >> 4) : (input_byte & 0xF);
+                     if (index != 0) { // Transparent
+                         u16 color = obj_pal[pal_bank * 16 + index];
+                         u8 r = (color & 0x1F) << 3;
+                         u8 g = ((color >> 5) & 0x1F) << 3;
+                         u8 b = ((color >> 10) & 0x1F) << 3;
+                         scanline_buffer[screen_x] = (255 << 24) | (r << 16) | (g << 8) | b;
+                     }
+                }
+                // 8bpp skipped for brevity
+            }
+        }
+    }
+}
+
+// Previous ppu_update_texture ...
+
 void ppu_update_texture(SDL_Texture *texture) {
 #ifdef USE_SDL
   u16 *vram = (u16 *)memory_get_vram();
@@ -175,6 +328,7 @@ void ppu_update_texture(SDL_Texture *texture) {
         // We'll emulate "drawing whole frame" here for the texture update.
         for (int y=0; y<GBA_SCREEN_HEIGHT; y++) {
              ppu_render_scanline_mode0(&dst[y * GBA_SCREEN_WIDTH], y);
+             ppu_render_oam(&dst[y * GBA_SCREEN_WIDTH], y); // Render Sprites
         }
     }
     else if (mode == 3) {

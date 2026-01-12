@@ -12,6 +12,7 @@ static u8 wram_on_chip[0x8000];
 static u8 io_regs[0x400];
 static u8 pal_ram[0x400];
 static u8 vram[0x18000]; // 96KB VRAM
+static u8 oam[0x400];    // 1KB OAM
 // static u32 dummy_rom[1024]; // 4KB dummy ROM - Replacing with real ROM buffer
 u8 *rom_memory = NULL;
 
@@ -26,6 +27,7 @@ void memory_init(void) {
 
   memset(pal_ram, 0, sizeof(pal_ram));
   memset(vram, 0, sizeof(vram));
+  memset(oam, 0, sizeof(oam));
   printf("Memory System Initialized.\n");
 }
 
@@ -216,11 +218,19 @@ void bus_write16(u32 addr, u16 value) {
     return;
   }
   if (addr >= 0x04000000 && addr <= 0x040003FF) {
+    if (addr == 0x04000000) {
+        printf("[IO] DISPCNT Write: %04X (Mode %d)\n", value, value & 7);
+    }
     *(u16 *)&io_regs[addr - 0x04000000] = value;
+    // printf("[IO] Write16: [%08X] = %04X\n", addr, value);
     return;
   }
   if (addr >= 0x05000000 && addr <= 0x050003FF) {
     *(u16 *)&pal_ram[addr - 0x05000000] = value;
+    return;
+  }
+  if (addr >= 0x07000000 && addr <= 0x070003FF) {
+    *(u16 *)&oam[addr - 0x07000000] = value;
     return;
   }
   // printf("[BUS] Write16: [%08X] = %04X\n", addr, value);
@@ -245,6 +255,7 @@ void mmu_write8(u32 addr, u8 value) {
 void mmu_write16(u32 addr, u16 value) {
   // Stub
 }
+u8 *memory_get_oam() { return oam; }
 
 void mmu_write32(u32 addr, u32 value) {
   // Stub

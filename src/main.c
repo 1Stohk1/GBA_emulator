@@ -101,7 +101,7 @@ int main(int argc, char *argv[]) {
 #endif
 
   // Headless loop limit
-  int max_cycles = 200000;
+  int max_cycles = 50000000;
 #ifdef USE_SDL
   (void)max_cycles; // Unused in SDL mode (runs until quit)
 #endif
