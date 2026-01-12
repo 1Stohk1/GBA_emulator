@@ -1,4 +1,4 @@
-CC = gcc
+CC = "C:/msys64/mingw64/bin/gcc.exe"
 CFLAGS = -Wall -Iinclude -g
 LDFLAGS = -lmingw32 -lSDL2main -lSDL2
 
