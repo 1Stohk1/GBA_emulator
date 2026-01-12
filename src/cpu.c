@@ -1,5 +1,6 @@
 #include "../include/cpu.h"
 #include "../include/memory.h"
+#include "../include/bios.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -494,7 +495,8 @@ int cpu_step_thumb(ARM7TDMI *cpu) {
   // Format 17: Software Interrupt (SWI)
   if ((instruction & 0xFF00) == 0xDF00) {
       u8 swi_comment = instruction & 0xFF;
-      printf("[CPU] SWI (Thumb) #%02X at PC=%08X\n", swi_comment, cpu->r[REG_PC]-2);
+      // printf("[CPU] SWI (Thumb) #%02X at PC=%08X\n", swi_comment, cpu->r[REG_PC]-2);
+      bios_handle_swi(cpu, swi_comment);
       return 1; 
   }
 
