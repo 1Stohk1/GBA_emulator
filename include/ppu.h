@@ -2,7 +2,14 @@
 #define PPU_H
 
 #include "common.h"
+
+#ifdef USE_SDL
 #include <SDL2/SDL.h>
+#else
+// Dummy types for headless mode
+typedef void SDL_Renderer;
+typedef void SDL_Texture;
+#endif
 
 // PPU Constants
 #define GBA_SCREEN_WIDTH 240
@@ -20,5 +27,8 @@ void ppu_update(int cycles);
 
 // Update texture with frame buffer
 void ppu_update_texture(SDL_Texture *texture);
+
+// Render one scanline in Mode 0 (Headless/Test)
+void ppu_render_scanline_mode0(u32 *scanline_buffer, int line);
 
 #endif // PPU_H

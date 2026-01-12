@@ -61,6 +61,34 @@ u8 mmu_read8(u32 addr) {
 u16 mmu_read16(u32 addr) { return 0; }
 
 u32 bus_read32(u32 addr) {
+  // BIOS
+  if (addr < 0x00004000) {
+    return *(u32 *)&bios[addr];
+  }
+  // EWRAM (0x02000000 - 0x0203FFFF)
+  if (addr >= 0x02000000 && addr <= 0x0203FFFF) {
+    return *(u32 *)&wram_on_board[addr - 0x02000000];
+  }
+  // IWRAM (0x03000000 - 0x03007FFF)
+  if (addr >= 0x03000000 && addr <= 0x03007FFF) {
+    return *(u32 *)&wram_on_chip[addr - 0x03000000];
+  }
+  // IO
+  if (addr >= 0x04000000 && addr <= 0x040003FF) {
+    if (addr == 0x04000130) { // KEYINPUT
+      return *(u16 *)&io_regs[0x130];
+    }
+    return *(u32 *)&io_regs[addr - 0x04000000];
+  }
+  // Palette
+  if (addr >= 0x05000000 && addr <= 0x050003FF) {
+    return *(u32 *)&pal_ram[addr - 0x05000000];
+  }
+  // VRAM (0x06000000 - 0x06017FFF)
+  if (addr >= 0x06000000 && addr <= 0x06017FFF) {
+     return *(u32 *)&vram[addr - 0x06000000];
+  }
+  // ROM
   if (addr >= 0x08000000 && addr <= 0x09FFFFFF) {
     if (rom_memory) {
       u32 offset = addr - 0x08000000;
@@ -68,19 +96,17 @@ u32 bus_read32(u32 addr) {
     }
     return 0;
   }
-  if (addr >= 0x04000000 && addr <= 0x040003FF) {
-    if (addr == 0x04000130) { // KEYINPUT
-      return *(u16 *)&io_regs[0x130];
-    }
-    return *(u32 *)&io_regs[addr - 0x04000000];
-  }
-  if (addr >= 0x05000000 && addr <= 0x050003FF) {
-    return *(u32 *)&pal_ram[addr - 0x05000000];
-  }
   return 0;
 }
 
 u16 bus_read16(u32 addr) {
+  // BIOS
+  if (addr < 0x00004000) return *(u16 *)&bios[addr];
+  // EWRAM
+  if (addr >= 0x02000000 && addr <= 0x0203FFFF) return *(u16 *)&wram_on_board[addr - 0x02000000];
+  // IWRAM
+  if (addr >= 0x03000000 && addr <= 0x03007FFF) return *(u16 *)&wram_on_chip[addr - 0x03000000];
+
   if (addr >= 0x08000000 && addr <= 0x09FFFFFF) {
     if (rom_memory) {
       u32 offset = addr - 0x08000000;
@@ -91,7 +117,7 @@ u16 bus_read16(u32 addr) {
   if (addr >= 0x04000000 && addr <= 0x040003FF) {
     if (addr == 0x04000130) { // KEYINPUT
       u16 val = *(u16 *)&io_regs[0x130];
-      printf("Reading KEYS. Value: %04X\n", val);
+      // printf("Reading KEYS. Value: %04X\n", val);
       return val;
     }
     return *(u16 *)&io_regs[addr - 0x04000000];
@@ -99,10 +125,17 @@ u16 bus_read16(u32 addr) {
   if (addr >= 0x05000000 && addr <= 0x050003FF) {
     return *(u16 *)&pal_ram[addr - 0x05000000];
   }
+  if (addr >= 0x06000000 && addr <= 0x06017FFF) {
+    return *(u16 *)&vram[addr - 0x06000000];
+  }
   return 0;
 }
 
 u8 bus_read8(u32 addr) {
+  if (addr < 0x00004000) return bios[addr];
+  if (addr >= 0x02000000 && addr <= 0x0203FFFF) return wram_on_board[addr - 0x02000000];
+  if (addr >= 0x03000000 && addr <= 0x03007FFF) return wram_on_chip[addr - 0x03000000];
+
   if (addr >= 0x08000000 && addr <= 0x09FFFFFF) {
     if (rom_memory) {
       return rom_memory[addr - 0x08000000];
@@ -114,20 +147,69 @@ u8 bus_read8(u32 addr) {
   if (addr >= 0x05000000 && addr <= 0x050003FF) {
     return pal_ram[addr - 0x05000000];
   }
-  // Stub for other regions
+  if (addr >= 0x06000000 && addr <= 0x06017FFF) {
+    return vram[addr - 0x06000000];
+  }
   return 0;
 }
 
 void bus_write32(u32 addr, u32 value) {
-  // Store prohibited or stubbed
+  if (addr >= 0x02000000 && addr <= 0x0203FFFF) {
+    *(u32 *)&wram_on_board[addr - 0x02000000] = value;
+    return;
+  }
+  if (addr >= 0x03000000 && addr <= 0x03007FFF) {
+    *(u32 *)&wram_on_chip[addr - 0x03000000] = value;
+    return;
+  }
+  if (addr >= 0x04000000 && addr <= 0x040003FF) {
+      *(u32 *)&io_regs[addr - 0x04000000] = value;
+      return;
+  }
+  if (addr >= 0x05000000 && addr <= 0x050003FF) {
+      *(u32 *)&pal_ram[addr - 0x05000000] = value;
+      return;
+  }
+  if (addr >= 0x06000000 && addr <= 0x06017FFF) {
+      *(u32 *)&vram[addr - 0x06000000] = value;
+      return;
+  }
   // printf("[BUS] Write32: [%08X] = %08X\n", addr, value);
 }
 
 void bus_write8(u32 addr, u8 value) {
+  if (addr >= 0x02000000 && addr <= 0x0203FFFF) {
+    wram_on_board[addr - 0x02000000] = value;
+    return;
+  }
+  if (addr >= 0x03000000 && addr <= 0x03007FFF) {
+    wram_on_chip[addr - 0x03000000] = value;
+    return;
+  }
+   if (addr >= 0x04000000 && addr <= 0x040003FF) {
+    io_regs[addr - 0x04000000] = value;
+    return;
+  }
+  if (addr >= 0x05000000 && addr <= 0x050003FF) {
+    pal_ram[addr - 0x05000000] = value;
+    return;
+  }
+  if (addr >= 0x06000000 && addr <= 0x06017FFF) {
+    vram[addr - 0x06000000] = value;
+    return;
+  }
   // printf("[BUS] Write8: [%08X] = %02X\n", addr, value);
 }
 
 void bus_write16(u32 addr, u16 value) {
+  if (addr >= 0x02000000 && addr <= 0x0203FFFF) {
+      *(u16 *)&wram_on_board[addr - 0x02000000] = value;
+      return;
+  }
+  if (addr >= 0x03000000 && addr <= 0x03007FFF) {
+      *(u16 *)&wram_on_chip[addr - 0x03000000] = value;
+      return;
+  }
   if (addr >= 0x06000000 && addr <= 0x06017FFF) {
     u32 offset = addr - 0x06000000;
     *(u16 *)&vram[offset] = value;
@@ -135,7 +217,6 @@ void bus_write16(u32 addr, u16 value) {
   }
   if (addr >= 0x04000000 && addr <= 0x040003FF) {
     *(u16 *)&io_regs[addr - 0x04000000] = value;
-    // printf("[IO] Write16: [%08X] = %04X\n", addr, value);
     return;
   }
   if (addr >= 0x05000000 && addr <= 0x050003FF) {
