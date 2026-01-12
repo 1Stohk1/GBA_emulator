@@ -6,7 +6,8 @@ CFLAGS = -Wall -Iinclude -g
 # To build with SDL: make SDL=1
 ifdef SDL
 CFLAGS += -DUSE_SDL
-LDFLAGS += -lSDL2
+# MinGW/Windows requires mingw32 and SDL2main before SDL2
+LDFLAGS += -lmingw32 -lSDL2main -lSDL2
 endif
 
 SRC_DIR = src

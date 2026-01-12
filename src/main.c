@@ -98,6 +98,9 @@ int main(int argc, char *argv[]) {
 
   // Headless loop limit
   int max_cycles = 200000;
+#ifdef USE_SDL
+  (void)max_cycles; // Unused in SDL mode (runs until quit)
+#endif
   int total_cycles = 0;
 
   while (!quit) {

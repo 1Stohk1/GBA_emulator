@@ -78,6 +78,9 @@ void ppu_render_scanline_mode0(u32 *scanline_buffer, int line) {
 
         // Screen Size
         // 0: 256x256, 1: 512x256, 2: 256x512, 3: 512x512
+        (void)priority;
+        (void)mosaic;
+        (void)size;
         
         // Scroll
         u16 hofs = *(u16 *)&io[0x10];
