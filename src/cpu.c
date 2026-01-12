@@ -125,7 +125,7 @@ int cpu_step_arm(ARM7TDMI *cpu);
 int cpu_step_thumb(ARM7TDMI *cpu);
 
 int cpu_step(ARM7TDMI *cpu) {
-  // printf("Step. Thumb? %d\n", (cpu->cpsr & FLAG_T) ? 1 : 0);
+  //  // printf("Step. Thumb? %d\n", (cpu->cpsr & FLAG_T) ? 1 : 0);
   if (cpu->cpsr & FLAG_T) {
     return cpu_step_thumb(cpu);
   } else {
@@ -757,11 +757,11 @@ int cpu_step_arm(ARM7TDMI *cpu) {
     if (target & 1) {
       cpu->cpsr |= FLAG_T;
       cpu->r[REG_PC] = target & ~1;
-      printf("  BX R%d -> Thumb Mode at %08X\n", rm, cpu->r[REG_PC]);
+      // printf("  BX R%d -> Thumb Mode at %08X\n", rm, cpu->r[REG_PC]);
     } else {
       cpu->cpsr &= ~FLAG_T;
       cpu->r[REG_PC] = target & ~3;
-      printf("  BX R%d -> ARM Mode at %08X\n", rm, cpu->r[REG_PC]);
+      // printf("  BX R%d -> ARM Mode at %08X\n", rm, cpu->r[REG_PC]);
     }
     return 3; // Pipeline flush implied by setting PC directly
   }
@@ -924,8 +924,8 @@ int cpu_step_arm(ARM7TDMI *cpu) {
       break;
     }
 
-    printf("  DP Op: %X, Res: %X, C_new: %d\n", opcode, result,
-           arithmetic_op ? alu_carry : shifter_carry);
+    // printf("  DP Op: %X, Res: %X, C_new: %d\n", opcode, result,
+    //        arithmetic_op ? alu_carry : shifter_carry);
 
     if (write_result) {
       if (rd_idx == REG_PC) {
@@ -1000,8 +1000,8 @@ int cpu_step_arm(ARM7TDMI *cpu) {
         addr -= offset;
     }
 
-    printf("  %s%s R%d, [R%d] (Addr: %X)\n", L_bit ? "LDR" : "STR",
-           B_bit ? "B" : "", rd_idx, rn_idx, addr);
+    // printf("  %s%s R%d, [R%d] (Addr: %X)\n", L_bit ? "LDR" : "STR",
+    //        B_bit ? "B" : "", rd_idx, rn_idx, addr);
 
     if (L_bit) {   // LDR
       if (B_bit) { // LDRB

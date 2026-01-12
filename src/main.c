@@ -41,7 +41,11 @@ typedef struct { SDL_Keysym keysym; } SDL_KeyboardEvent;
 
 int main(int argc, char *argv[]) {
   setbuf(stdout, NULL);
-  printf("Starting GBA Emulator (Headless)...\n");
+#ifdef USE_SDL
+  printf("Starting GBA Emulator (SDL)\n");
+#else
+  printf("Starting GBA Emulator (Headless)\n");
+#endif
 
 #ifdef USE_SDL
   if (SDL_Init(SDL_INIT_VIDEO) < 0) {
