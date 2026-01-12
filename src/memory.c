@@ -16,6 +16,9 @@ static u8 oam[0x400];    // 1KB OAM
 // static u32 dummy_rom[1024]; // 4KB dummy ROM - Replacing with real ROM buffer
 u8 *rom_memory = NULL;
 
+// Forward Declaration
+void check_dma(int channel, u16 control_val);
+
 void memory_init(void) {
   memset(bios, 0, sizeof(bios));
   memset(wram_on_board, 0, sizeof(wram_on_board));
@@ -222,7 +225,18 @@ void bus_write16(u32 addr, u16 value) {
         printf("[IO] DISPCNT Write: %04X (Mode %d)\n", value, value & 7);
     }
     *(u16 *)&io_regs[addr - 0x04000000] = value;
-    // printf("[IO] Write16: [%08X] = %04X\n", addr, value);
+    
+    // Check for DMA Control Write (Offset 0xBA, 0xC6, 0xD2, 0xDE)
+    // DMA0CNT_H = 0xBA
+    // DMA1CNT_H = 0xC6
+    // DMA2CNT_H = 0xD2
+    // DMA3CNT_H = 0xDE
+    u32 offset = addr - 0x04000000;
+    if (offset == 0xBA) check_dma(0, value);
+    else if (offset == 0xC6) check_dma(1, value);
+    else if (offset == 0xD2) check_dma(2, value);
+    else if (offset == 0xDE) check_dma(3, value);
+    
     return;
   }
   if (addr >= 0x05000000 && addr <= 0x050003FF) {
@@ -256,6 +270,72 @@ void mmu_write16(u32 addr, u16 value) {
   // Stub
 }
 u8 *memory_get_oam() { return oam; }
+
+// DMA Helper (Forward declaration or impl)
+void check_dma(int channel, u16 control_val) {
+    // DMA Registers base: 0x40000B0 + ch*12
+    u32 base = 0xB0 + channel * 12;
+    u8 *io = memory_get_io();
+    
+    // Read SAD, DAD, CNT_L from IO
+    u32 sad = *(u32 *)&io[base];
+    u32 dad = *(u32 *)&io[base + 4];
+    u16 cnt_l = *(u16 *)&io[base + 8];
+    // control_val is the new value for CNT_H (base + 10)
+    
+    // If Enable (Bit 15) and Timing=0 (Immediate)
+    // Timing bits: 12-13.
+    bool enable = (control_val >> 15) & 1;
+    int timing = (control_val >> 12) & 3; // 0=Immediate
+    
+    if (enable && timing == 0) {
+        // execute copy
+        // Size: Bit 10 (0=16bit, 1=32bit)
+        bool is_32 = (control_val >> 10) & 1;
+        int count = cnt_l;
+        if (count == 0) count = (channel == 3) ? 0x10000 : 0x4000; 
+        
+        // Addr Ctrl
+        int dest_adj = (control_val >> 5) & 3; // 0=Inc, 1=Dec, 2=Fixed, 3=Reload
+        int src_adj = (control_val >> 7) & 3;  // 0=Inc, 1=Dec, 2=Fixed
+        
+        u32 src = sad;
+        u32 dst = dad;
+        int step = is_32 ? 4 : 2;
+        
+        //printf("[DMA%d] Transfer: Src=%08X Dst=%08X Count=%X 32bit=%d\n", channel, src, dst, count, is_32);
+        
+        for (int i=0; i<count; i++) {
+            if (is_32) {
+                u32 val = bus_read32(src);
+                bus_write32(dst, val);
+            } else {
+                u16 val = bus_read16(src);
+                bus_write16(dst, val);
+            }
+            
+            // Update Addr
+            if (src_adj == 0) src += step;
+            else if (src_adj == 1) src -= step;
+            // fixed ignored
+            
+            if (dest_adj == 0) dst += step;
+            else if (dest_adj == 1) dst -= step;
+            // fixed ignored
+        }
+        
+        // Clear Enable bit after immediate transfer? 
+        // Docs: "Enable bit is NOT cleared automatically for VBlank/HBlank/VidCap modes... 
+        // For Immediate mode, transfer starts immediately... bit remains set?"
+        // Actually, Immediate mode stops after transfer. User should clear it? 
+        // Or emulator clears it to indicate done?
+        // "When the transfer is finished, the Enable bit is cleared (unless Repeat is set)."
+        if (!((control_val >> 9) & 1)) { // If Repeat not set
+            control_val &= ~(1 << 15); // Clear Enable
+            *(u16 *)&io[base + 10] = control_val;
+        }
+    }
+}
 
 void mmu_write32(u32 addr, u32 value) {
   // Stub

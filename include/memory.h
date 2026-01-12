@@ -23,6 +23,7 @@ u8 *memory_get_vram(void);
 u8 *memory_get_io(void);
 u8 *memory_get_pal(void);
 u8 *memory_get_oam(void);
+u32 bus_read32(u32 addr);
 void memory_set_key_state(u16 key_mask);
 
 void mmu_write8(u32 addr, u8 value);
