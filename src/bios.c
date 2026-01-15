@@ -205,7 +205,9 @@ void swi_vblank_intr_wait(ARM7TDMI *cpu) {
 }
 
 void bios_handle_swi(ARM7TDMI *cpu, u8 swi_number) {
-    // printf("[BIOS] Handling SWI %02X\n", swi_number);
+    if (swi_number != 0x05 && swi_number != 0x04) { // Filter VBlankIntrWait/IntrWait
+        printf("[BIOS] Handling SWI %02X\n", swi_number);
+    }
     switch (swi_number) {
         case 0x00: swi_soft_reset(cpu); break;
         case 0x01: swi_register_ram_reset(cpu); break;

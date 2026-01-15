@@ -249,6 +249,11 @@ void bus_write32(u32 addr, u32 value) {
       *(u32 *)&pal_ram[addr - 0x05000000] = value;
       return;
   }
+  
+  if (addr == 0x04000000) {
+      printf("[IO] Write32 DISPCNT = %04X\n", value);
+  }
+  
   if (addr >= 0x06000000 && addr <= 0x06017FFF) {
       *(u32 *)&vram[addr - 0x06000000] = value;
       return;
