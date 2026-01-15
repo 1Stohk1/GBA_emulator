@@ -6,14 +6,17 @@ CFLAGS = -Wall -Iinclude -g
 # To build with SDL: make SDL=1
 ifneq ($(SDL),)
 CFLAGS += -DUSE_SDL
-# Try to auto-detect SDL2 using sdl2-config (standard on MinGW/Linux)
-SDL_CONFIG := $(shell command -v sdl2-config 2> /dev/null)
-ifdef SDL_CONFIG
+# Check if sdl2-config works by running it
+SDL_VER := $(shell sdl2-config --version 2> /dev/null)
+
+ifneq ($(SDL_VER),)
+    # Found sdl2-config
     CFLAGS += $(shell sdl2-config --cflags)
     LDFLAGS += $(shell sdl2-config --libs)
 else
     # Fallback for Windows/MinGW if sdl2-config is missing
     # Assuming standard MSYS2/MinGW64 paths
+    # Use -I. to ensure local includes are found too
     CFLAGS += -I/mingw64/include/SDL2 -Dmain=SDL_main
     LDFLAGS += -lmingw32 -lSDL2main -lSDL2
 endif
