@@ -4,10 +4,17 @@ CFLAGS = -Wall -Iinclude -g
 # LDFLAGS = -lSDL2 # Uncomment if SDL is present
 
 # To build with SDL: make SDL=1
-ifdef SDL
+ifneq ($(SDL),)
 CFLAGS += -DUSE_SDL
-# MinGW/Windows requires mingw32 and SDL2main before SDL2
-LDFLAGS += -lmingw32 -lSDL2main -lSDL2
+# Try to auto-detect SDL2 using sdl2-config (standard on MinGW/Linux)
+SDL_CONFIG := $(shell command -v sdl2-config 2> /dev/null)
+ifdef SDL_CONFIG
+    CFLAGS += $(shell sdl2-config --cflags)
+    LDFLAGS += $(shell sdl2-config --libs)
+else
+    # Fallback for Windows/MinGW if sdl2-config is missing
+    LDFLAGS += -lmingw32 -lSDL2main -lSDL2
+endif
 endif
 
 SRC_DIR = src
