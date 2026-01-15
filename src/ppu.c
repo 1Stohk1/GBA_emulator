@@ -51,7 +51,10 @@ void ppu_update(int cycles) {
         // Check VBlank Transition (Line 160)
         if (vcount == 160) {
             new_stat |= 1; // Set VBlank
-            if (new_stat & 0x08) *(u16 *)&io[0x202] |= 1; // IRQ
+            if (new_stat & 0x08) {
+                 *(u16 *)&io[0x202] |= 1; // IRQ
+                 // printf("[PPU] VBlank IRQ Request\n");
+            }
             memory_check_dma_vblank();
         } 
         else if (vcount == 0) { // End of VBlank
