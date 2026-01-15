@@ -141,6 +141,20 @@ int main(int argc, char *argv[]) {
     }
 
 #ifdef USE_SDL
+    // FPS Calculation
+    static u32 start_time = 0;
+    static int frames = 0;
+    if (start_time == 0) start_time = SDL_GetTicks();
+    frames++;
+    
+    if (SDL_GetTicks() - start_time >= 1000) {
+        char title[128];
+        sprintf(title, "GBA Emulator - FPS: %d - PC: %08X", frames, cpu.r[REG_PC]);
+        SDL_SetWindowTitle(window, title);
+        frames = 0;
+        start_time = SDL_GetTicks();
+    }
+    
     // Render
     SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
     SDL_RenderClear(renderer);
