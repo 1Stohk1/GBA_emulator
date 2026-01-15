@@ -304,8 +304,34 @@ void ppu_render_oam(u32 *scanline_buffer, int line) {
 
 // Previous ppu_update_texture ...
 
+// Internal Framebuffer for Headless/Screenshot
+static u32 internal_framebuffer[GBA_SCREEN_WIDTH * GBA_SCREEN_HEIGHT];
+
+void ppu_save_screenshot(const char *filename) {
+    FILE *f = fopen(filename, "wb");
+    if (!f) {
+        printf("Failed to create screenshot: %s\n", filename);
+        return;
+    }
+    // P6 = Binary PPM, 240x160, 255 max val
+    fprintf(f, "P6\n%d %d\n255\n", GBA_SCREEN_WIDTH, GBA_SCREEN_HEIGHT);
+    
+    for (int i = 0; i < GBA_SCREEN_WIDTH * GBA_SCREEN_HEIGHT; i++) {
+        u32 color = internal_framebuffer[i];
+        // Saved as ARGB8888 in buffer (from our render logic)
+        // PPM needs RGB
+        u8 r = (color >> 16) & 0xFF;
+        u8 g = (color >> 8) & 0xFF;
+        u8 b = color & 0xFF;
+        fputc(r, f);
+        fputc(g, f);
+        fputc(b, f);
+    }
+    fclose(f);
+    printf("Screenshot saved to %s\n", filename);
+}
+
 void ppu_update_texture(SDL_Texture *texture) {
-#ifdef USE_SDL
   u16 *vram = (u16 *)memory_get_vram();
   u8 *io = memory_get_io();
   u16 *pal = (u16 *)memory_get_pal();
@@ -314,21 +340,22 @@ void ppu_update_texture(SDL_Texture *texture) {
   u16 dispcnt = *(u16 *)&io[0];
   u8 mode = dispcnt & 7;
 
-  void *pixels;
-  int pitch;
-  
-  if (!texture) return; // Headless guard
-  
-  if (SDL_LockTexture(texture, NULL, &pixels, &pitch) == 0) {
-    u32 *dst = (u32 *)pixels;
+  // Determine destination buffer
+  u32 *dst = internal_framebuffer;
+#ifdef USE_SDL
+  void *pixels = NULL;
+  int pitch = 0;
+  if (texture) {
+      if (SDL_LockTexture(texture, NULL, &pixels, &pitch) < 0) return;
+      dst = (u32 *)pixels;
+  }
+#endif
 
+  // Render Frame
     if (mode == 0) {
-        // Line by Line (Headless/PPU Test style, but doing full frame here)
-        // Note: Real PPU renders line by line during HBlank.
-        // We'll emulate "drawing whole frame" here for the texture update.
         for (int y=0; y<GBA_SCREEN_HEIGHT; y++) {
              ppu_render_scanline_mode0(&dst[y * GBA_SCREEN_WIDTH], y);
-             ppu_render_oam(&dst[y * GBA_SCREEN_WIDTH], y); // Render Sprites
+             ppu_render_oam(&dst[y * GBA_SCREEN_WIDTH], y); 
         }
     }
     else if (mode == 3) {
@@ -341,15 +368,12 @@ void ppu_update_texture(SDL_Texture *texture) {
         dst[i] = (255 << 24) | (r << 16) | (g << 8) | b;
       }
     } else if (mode == 4) {
-      // Mode 4...
-      // (Existing logic preserved)
       u8 *page_ptr = (u8 *)vram;
-      if (dispcnt & 0x10)
-        page_ptr += 0xA000;
+      if (dispcnt & 0x10) page_ptr += 0xA000;
 
       for (int i = 0; i < GBA_SCREEN_WIDTH * GBA_SCREEN_HEIGHT; i++) {
         u8 index = page_ptr[i];
-        u16 color = pal[index]; // Read from Palette RAM
+        u16 color = pal[index]; 
         u8 r = (color & 0x1F) << 3;
         u8 g = ((color >> 5) & 0x1F) << 3;
         u8 b = ((color >> 10) & 0x1F) << 3;
@@ -361,7 +385,8 @@ void ppu_update_texture(SDL_Texture *texture) {
         dst[i] = 0xFF000000;
       }
     }
-    SDL_UnlockTexture(texture);
-  }
+  
+#ifdef USE_SDL
+  if (texture) SDL_UnlockTexture(texture);
 #endif
 }

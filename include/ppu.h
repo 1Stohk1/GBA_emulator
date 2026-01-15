@@ -31,4 +31,7 @@ void ppu_update_texture(SDL_Texture *texture);
 // Render one scanline in Mode 0 (Headless/Test)
 void ppu_render_scanline_mode0(u32 *scanline_buffer, int line);
 
+// Save screenshot to PPM file (Headless Debug)
+void ppu_save_screenshot(const char *filename);
+
 #endif // PPU_H

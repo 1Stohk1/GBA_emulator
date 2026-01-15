@@ -176,6 +176,10 @@ int main(int argc, char *argv[]) {
   SDL_Quit();
 #endif
   
+#ifndef USE_SDL
+  ppu_save_screenshot("screenshot.ppm");
+#endif
+  
   printf("Emulation finished (Headless limit reached or Quit).\n");
   return 0;
 }
