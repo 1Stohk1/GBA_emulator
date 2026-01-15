@@ -13,6 +13,8 @@ ifdef SDL_CONFIG
     LDFLAGS += $(shell sdl2-config --libs)
 else
     # Fallback for Windows/MinGW if sdl2-config is missing
+    # Assuming standard MSYS2/MinGW64 paths
+    CFLAGS += -I/mingw64/include/SDL2 -Dmain=SDL_main
     LDFLAGS += -lmingw32 -lSDL2main -lSDL2
 endif
 endif

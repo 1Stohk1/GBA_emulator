@@ -9,7 +9,7 @@
 #include <stdio.h>
 
 #ifdef USE_SDL
-#include <SDL2/SDL.h>
+#include <SDL.h>
 #else
 // Dummy SDL stubs for headless mode
 typedef void SDL_Window;
