@@ -25,6 +25,8 @@ u8 *memory_get_pal(void);
 u8 *memory_get_oam(void);
 u32 bus_read32(u32 addr);
 void memory_set_key_state(u16 key_mask);
+void memory_check_dma_vblank(void);
+void timer_step(int cycles);
 
 void mmu_write8(u32 addr, u8 value);
 void mmu_write16(u32 addr, u16 value);

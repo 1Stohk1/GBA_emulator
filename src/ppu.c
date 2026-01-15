@@ -45,6 +45,9 @@ void ppu_update(int cycles) {
           u16 *if_reg = (u16 *)&io_base[0x202];
           *if_reg |= 1; // Set Bit 0 (VBlank)
           
+          // Trigger VBlank DMA
+          memory_check_dma_vblank();
+          
           // Also set in BIOS/WRAM mirror if needed? 
           // (Usually 0x03007FF8 IntFlags, but that's handled by BIOS ISR.
           // Since we have no BIOS, games reading IO directly should work.

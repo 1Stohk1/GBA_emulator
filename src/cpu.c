@@ -218,6 +218,8 @@ int cpu_step(ARM7TDMI *cpu) {
 int cpu_step_thumb(ARM7TDMI *cpu) {
   u32 pc = cpu->r[REG_PC];
   u16 instruction = bus_read16(pc);
+  
+  // 1. Fetch (Already fetched above)
 
   // Thumb execution logic
   // Update PC (Thumb PC is PC+4 for execution, but step is +2)
@@ -830,6 +832,12 @@ int cpu_step_thumb(ARM7TDMI *cpu) {
 int cpu_step_arm(ARM7TDMI *cpu) {
   // 1. Fetch
   u32 instruction = bus_read32(cpu->r[REG_PC]);
+  
+  static int cycles = 0;
+  cycles++;
+  if (cycles % 1000000 == 0) {
+      printf("PC=%08X\n", cpu->r[REG_PC]);
+  }
 
   // 2. Decode Condition
   u32 cond = instruction >> 28;

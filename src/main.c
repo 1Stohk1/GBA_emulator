@@ -133,6 +133,7 @@ int main(int argc, char *argv[]) {
     while (cycles_run < cycles_per_frame) {
       int cycles = cpu_step(&cpu);
       ppu_update(cycles);
+      timer_step(cycles);
       cycles_run += cycles;
       total_cycles += cycles;
 #ifndef USE_SDL
