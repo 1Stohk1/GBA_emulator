@@ -170,11 +170,42 @@ void swi_lz77_uncomp(ARM7TDMI *cpu, bool wram) {
     }
 }
 
+void swi_div(ARM7TDMI *cpu) {
+    // 0x06: Div (R0 / R1)
+    // Results: R0 = Quot, R1 = Rem, R3 = Abs(Quot)
+    int32_t num = (int32_t)cpu->r[0];
+    int32_t den = (int32_t)cpu->r[1];
+    
+    if (den == 0) {
+        // Division by zero behavior? 
+        // Usually returns large value or hangs. 
+        // For now, avoid crash.
+        cpu->r[0] = 0; 
+        cpu->r[1] = 0; // ?
+    } else {
+        cpu->r[0] = num / den;
+        cpu->r[1] = num % den;
+        cpu->r[3] = (cpu->r[0] < 0) ? -cpu->r[0] : cpu->r[0];
+    }
+}
+
+void swi_vblank_intr_wait(ARM7TDMI *cpu) {
+    // 0x05: VBlankIntrWait
+    // Waits for VBlank Interrupt.
+    // In our HLE, we can just assume we are fast enough or just return.
+    // Ideally, we should yield execution, but for now, successful return.
+    // We should probably check IF/IE registers?
+    // Stub: do nothing, just return. (Game will loop if it needs to wait more)
+}
+
 void bios_handle_swi(ARM7TDMI *cpu, u8 swi_number) {
     // printf("[BIOS] Handling SWI %02X\n", swi_number);
     switch (swi_number) {
         case 0x00: swi_soft_reset(cpu); break;
         case 0x01: swi_register_ram_reset(cpu); break;
+        
+        case 0x05: swi_vblank_intr_wait(cpu); break;
+        case 0x06: swi_div(cpu); break;
         
         case 0x0B: swi_cpu_set(cpu); break;
         case 0x0C: swi_cpu_fast_set(cpu); break;
@@ -182,10 +213,8 @@ void bios_handle_swi(ARM7TDMI *cpu, u8 swi_number) {
         case 0x11: swi_lz77_uncomp(cpu, true); break; // LZ77 WRAM
         case 0x12: swi_lz77_uncomp(cpu, false); break; // LZ77 VRAM
         
-        // Add others as needed
-        // 0x06: Div? 0x07: DivArm?
         default:
-            // printf("[BIOS] Unknown SWI %02X\n", swi_number);
+             printf("[BIOS] Unimplemented SWI %02X\n", swi_number);
             break;
     }
 }
