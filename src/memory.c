@@ -363,7 +363,7 @@ u8 *memory_get_oam() { return oam; }
 
 // DMA Helper (Forward declaration or impl)
 static void perform_dma(int channel) {
-    u32 base = 0x040000B0 + (channel * 12);
+    // u32 base = 0x040000B0 + (channel * 12); // Unused
     // Determine IO offset correctly
     // Global io_regs are at base 0 from pointer view?
     // memory_get_io() returns pointer to 0x04000000 base.
