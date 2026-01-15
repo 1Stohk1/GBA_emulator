@@ -995,9 +995,16 @@ int cpu_step_arm(ARM7TDMI *cpu) {
     if (!I_bit) { // Immediate Offset (12-bit)
       offset = instruction & 0xFFF;
     } else {
-      // Register Offset - User requested "only support immediate for now"
-      // We'll treat as 0 or error.
-      printf("  LDR/STR: Register offset not supported yet.\n");
+      // Register Offset
+      u32 rm_idx = instruction & 0xF;
+      u32 val_m = (rm_idx == REG_PC) ? (cpu->r[REG_PC] + 8) : cpu->r[rm_idx];
+
+      u32 shift_imm = (instruction >> 7) & 0x1F;
+      u32 shift_type = (instruction >> 5) & 3;
+
+      u32 shifter_carry = (cpu->cpsr & FLAG_C) ? 1 : 0; // Not used for offset calculation but needed for API
+      
+      offset = barrel_shift(val_m, shift_type, shift_imm, &shifter_carry);
     }
 
     u32 addr = base_addr;
