@@ -18,45 +18,57 @@ static int cycle_bucket = 0;
 static int vcount = 0;
 
 void ppu_update(int cycles) {
-  cycle_bucket += cycles;
-
-  while (cycle_bucket >= 1232) {
-    cycle_bucket -= 1232;
-    vcount++;
-
-    if (vcount > 227) {
-      vcount = 0;
-    }
-
-    // Update VCOUNT (0x04000006)
+    // Update Accumulator
+    cycle_bucket += cycles;
+    
+    // Define Constants
+    const int CYCLES_PER_LINE = 1232;
+    const int CYCLES_HDRAW = 960;
+    
+    // Check DISPSTAT Status *Current*
     u8 *io = memory_get_io();
-    *(u16 *)&io[6] = vcount;
-
-    // Update DISPSTAT (0x04000004) VBlank Flag (Bit 0)
-    // VBlank is lines 160-227
-    u16 *dispstat = (u16 *)&io[4];
-    if (vcount >= 160 && vcount <= 227) {
-      if (!(*dispstat & 1)) { // Rising Edge of VBlank
-          *dispstat |= 1; // Set VBlank Status
-          
-          // Trigger VBlank IRQ in IF (0x04000202)
-          // IF is at offset 0x202 in IO
-          u8 *io_base = memory_get_io();
-          u16 *if_reg = (u16 *)&io_base[0x202];
-          *if_reg |= 1; // Set Bit 0 (VBlank)
-          
-          // Trigger VBlank DMA
-          memory_check_dma_vblank();
-          
-          // Also set in BIOS/WRAM mirror if needed? 
-          // (Usually 0x03007FF8 IntFlags, but that's handled by BIOS ISR.
-          // Since we have no BIOS, games reading IO directly should work.
-          // If games rely on BIOS to copy IF to 0x0300xxxx, we might need more Hacks.)
-      }
+    u16 old_stat = *(u16 *)&io[4]; 
+    u16 new_stat = old_stat;
+    
+    // HBlank Status (Bit 1)
+    // 0..960 = Drawing (Flag 0), 960..1232 = HBlank (Flag 1)
+    if (cycle_bucket >= CYCLES_HDRAW) {
+        if (!(old_stat & 2)) { // Rising Edge HBlank
+           new_stat |= 2;
+           if (new_stat & 0x10) *(u16 *)&io[0x202] |= 2; // IRQ
+        }
     } else {
-      *dispstat &= ~1; // Clear VBlank
+        new_stat &= ~2; // Clear HBlank
     }
-  }
+    
+    while (cycle_bucket >= CYCLES_PER_LINE) {
+        cycle_bucket -= CYCLES_PER_LINE;
+        vcount++;
+        if (vcount > 227) vcount = 0;
+        
+        *(u16 *)&io[6] = vcount; // Update VCount IO
+        
+        // Check VBlank Transition (Line 160)
+        if (vcount == 160) {
+            new_stat |= 1; // Set VBlank
+            if (new_stat & 0x08) *(u16 *)&io[0x202] |= 1; // IRQ
+            memory_check_dma_vblank();
+        } 
+        else if (vcount == 0) { // End of VBlank
+             new_stat &= ~1; // Clear VBlank
+        }
+        
+        // V-Counter Match (Bit 2)
+        u8 vcount_setting = (new_stat >> 8) & 0xFF;
+        if (vcount == vcount_setting) {
+             new_stat |= 4; // Set Match
+             if (new_stat & 0x20) *(u16 *)&io[0x202] |= 4; // IRQ
+        } else {
+             new_stat &= ~4;
+        }
+    }
+    
+    *(u16 *)&io[4] = new_stat;
 }
 
 // Helper: Read palette color
@@ -70,98 +82,98 @@ void ppu_render_scanline_mode0(u32 *scanline_buffer, int line) {
     u8 *vram = memory_get_vram();
     u16 dispcnt = *(u16 *)&io[0];
 
-    // For each BG (0-3)
-    // Simplified: Just render BG0 for now or loop all enabled
-    // Bit 8=BG0, 9=BG1, 10=BG2, 11=BG3
-    
-    // Clear scanline (Transparent / Backdrop?)
-    // Using Palette 0 color 0 usually (Transparent)
+    // Clear buffer (Transparent / Backdrop - usually Pal 0)
     for(int x=0; x<GBA_SCREEN_WIDTH; x++) scanline_buffer[x] = 0; // Black/Transparent
-
-    // Render BGs in order 3 -> 0 (Priority TODO)
-    // Logic: Iterate BGs with priority. For now, simple loop 3 down to 0? 
-    // Usually hardware sorts by priority registers.
-    // Let's just implement BG0 for starters as it's common.
     
-    if (dispcnt & 0x0100) { // BG0 Enabled
-        u16 bg0cnt = *(u16 *)&io[0x08];
-        int priority = bg0cnt & 3;
-        int char_base_block = (bg0cnt >> 2) & 3;
-        int mosaic = (bg0cnt >> 6) & 1;
-        int color_mode = (bg0cnt >> 7) & 1; // 0=16/16, 1=256/1
-        int screen_base_block = (bg0cnt >> 8) & 0x1F;
-        int size = (bg0cnt >> 14) & 3; 
-
-        // Screen Size
-        // 0: 256x256, 1: 512x256, 2: 256x512, 3: 512x512
-        (void)priority;
-        (void)mosaic;
-        (void)size;
-        
-        // Scroll
-        u16 hofs = *(u16 *)&io[0x10];
-        u16 vofs = *(u16 *)&io[0x12];
-        
-        int map_base = screen_base_block * 2048; // 2KB steps
-        int tile_base = char_base_block * 16384; // 16KB steps
-        
-        for (int x = 0; x < GBA_SCREEN_WIDTH; x++) {
-            int scx = (x + hofs) & 0x1FF; // Mask for 512 (max width)? Depends on size
-            int scy = (line + vofs) & 0x1FF;
+    // Render BGs by Priority (3 -> 0)
+    for (int prio = 3; prio >= 0; prio--) {
+        // Check all 4 BGs
+        for (int bg=0; bg<4; bg++) {
+            // Check Enable (Bits 8,9,10,11)
+            bool enabled = (dispcnt >> (8+bg)) & 1;
+            if (!enabled) continue;
             
-            // Map coordinates
-            // Assuming Size 0 (256x256) for simplicity first
-            // Tile Map is 32x32 tiles (2 bytes each)
-            int map_x = (scx / 8) & 0x1F;
-            int map_y = (scy / 8) & 0x1F;
+            u16 bgcnt = *(u16 *)&io[0x08 + bg*2];
+            int bg_prio = bgcnt & 3;
+            if (bg_prio != prio) continue;
             
-            // Read Tile Entry
-            // Map is at vram + map_base
-            // Offset = (map_y * 32 + map_x) * 2
-            int entry_idx = (map_y * 32 + map_x) * 2;
-            u16 tile_entry = *(u16 *)&vram[map_base + entry_idx];
+            // Render this BG
+            int char_base_block = (bgcnt >> 2) & 3;
+            int mosaic = (bgcnt >> 6) & 1;
+            int color_mode = (bgcnt >> 7) & 1; // 0=16/16, 1=256/1
+            int screen_base_block = (bgcnt >> 8) & 0x1F;
+            int size = (bgcnt >> 14) & 3;
             
-            int tile_idx = tile_entry & 0x3FF;
-            int h_flip = (tile_entry >> 10) & 1;
-            int v_flip = (tile_entry >> 11) & 1;
-            int pal_bank = (tile_entry >> 12) & 0xF;
+            // Unused params supress
+            (void)mosaic;
+            (void)size; // TODO: Handle large maps logic (Size 1,2,3)
+            // Current simplification: Treat all as Size 0 (256x256)
             
-            // Tile Pixel
-            int tile_pixel_x = scx % 8;
-            int tile_pixel_y = scy % 8;
+            // Scroll Registers
+            u16 hofs = *(u16 *)&io[0x10 + bg*4];
+            u16 vofs = *(u16 *)&io[0x12 + bg*4];
             
-            if (h_flip) tile_pixel_x = 7 - tile_pixel_x;
-            if (v_flip) tile_pixel_y = 7 - tile_pixel_y;
+            int map_base = screen_base_block * 2048; // 2KB steps
+            int tile_base = char_base_block * 16384; // 16KB steps
             
-            // Read Pixel Data
-            // 4bpp (16 colors): 32 bytes per tile (8x8x0.5)
-            // 8bpp (256 colors): 64 bytes per tile
-            
-            u8 color_idx = 0;
-            if (color_mode == 0) { // 4bpp
-               int offset = tile_base + (tile_idx * 32) + (tile_pixel_y * 4) + (tile_pixel_x / 2);
-               u8 byte = vram[offset];
-               if (tile_pixel_x & 1) color_idx = byte >> 4;
-               else color_idx = byte & 0xF;
-            } else { // 8bpp
-               int offset = tile_base + (tile_idx * 64) + (tile_pixel_y * 8) + tile_pixel_x;
-               color_idx = vram[offset];
-            }
-            
-            if (color_idx != 0) { // Entry 0 is transparent
-                // Fetch color from palette
-                u16 color = 0;
-                if (color_mode == 0) {
-                    color = ppu_read_palette(pal_bank * 16 + color_idx);
-                } else {
-                    color = ppu_read_palette(color_idx);
+            for (int x = 0; x < GBA_SCREEN_WIDTH; x++) {
+                int scx = (x + hofs) & 0x1FF; // Wrap 512
+                int scy = (line + vofs) & 0x1FF;
+                
+                // Map coordinates
+                int map_x = (scx / 8) & 0x1F;
+                int map_y = (scy / 8) & 0x1F;
+                
+                // Size Logic Override for Demo (Assume Size 0)
+                // TODO: Correct Size logic selection for map_addr
+                
+                // Read Tile Entry
+                int entry_idx = (map_y * 32 + map_x) * 2;
+                u16 tile_entry = *(u16 *)&vram[map_base + entry_idx];
+                
+                int tile_idx = tile_entry & 0x3FF;
+                int h_flip = (tile_entry >> 10) & 1;
+                int v_flip = (tile_entry >> 11) & 1;
+                int pal_bank = (tile_entry >> 12) & 0xF;
+                
+                // Tile Pixel
+                int tile_pixel_x = scx % 8;
+                int tile_pixel_y = scy % 8;
+                
+                if (h_flip) tile_pixel_x = 7 - tile_pixel_x;
+                if (v_flip) tile_pixel_y = 7 - tile_pixel_y;
+                
+                // Read Pixel Data
+                u8 color_idx = 0;
+                if (color_mode == 0) { // 4bpp
+                   int offset = tile_base + (tile_idx * 32) + (tile_pixel_y * 4) + (tile_pixel_x / 2);
+                   u8 byte = vram[offset];
+                   if (tile_pixel_x & 1) color_idx = byte >> 4;
+                   else color_idx = byte & 0xF;
+                } else { // 8bpp
+                   int offset = tile_base + (tile_idx * 64) + (tile_pixel_y * 8) + tile_pixel_x;
+                   color_idx = vram[offset];
                 }
                 
-                // Convert 15-bit to 32-bit ARGB
-                u8 r = (color & 0x1F) << 3;
-                u8 g = ((color >> 5) & 0x1F) << 3;
-                u8 b = ((color >> 10) & 0x1F) << 3;
-                scanline_buffer[x] = (255 << 24) | (r << 16) | (g << 8) | b;
+                if (color_idx != 0) { // Entry 0 is transparent
+                    // Fetch color from palette
+                    u16 color = 0;
+                    if (color_mode == 0) {
+                        color = ppu_read_palette(pal_bank * 16 + color_idx);
+                    } else {
+                        color = ppu_read_palette(color_idx);
+                    }
+                    
+                    // Convert 15-bit to 32-bit ARGB
+                    u8 r = (color & 0x1F) << 3;
+                    u8 g = ((color >> 5) & 0x1F) << 3;
+                    u8 b = ((color >> 10) & 0x1F) << 3;
+                    scanline_buffer[x] = (255 << 24) | (r << 16) | (g << 8) | b;
+                } else {
+                     if (line == 0 && x < 4) {
+                        printf("L0 X%d: Transparent. Byte=%02X\n", x, (color_mode==0) ? vram[tile_base + (tile_idx * 32) + (tile_pixel_y * 4) + (tile_pixel_x / 2)] : 0);
+                     }
+                }
             }
         }
     }
