@@ -3,70 +3,60 @@
 // Simple GBA ROM Generator
 // Generates a minimal ROM that sets Mode 3 and fills the screen with RED.
 
-unsigned char thumb_code[] = {
-    // 1. Setup Mode 3 (0x403) in DISPCNT (0x04000000)
-    // R0 = 0x04000000 (IO Base)
-    0x04, 0x20, 0x00, 0x06, // MOV R0, #4; LSL R0, R0, #24 -> 0x04000000
-    // Actually simpler: 
-    // MOV R0, #0x400
-    // LSL R0, R0, #16
-    
-    // Hand-assembled for:
-    // MOV R0, #128   (0x80)
-    // LSL R0, R0, #19 (0x04000000)
-    // But let's stick to simple immediate loads or PC-relative.
-    
-    // R0 = 0x04000000
-    0x80, 0x20, // MOV R0, #128
-    0xC0, 0x04, // LSL R0, R0, #19 -> 0x04000000
-    
-    // R1 = 0x403 (Mode 3 + BG2)
-    0x04, 0x21, // MOV R1, #4
-    0x08, 0x02, // LSL R1, R1, #8 -> 0x400
-    0x03, 0x31, // ADD R1, #3 -> 0x403
-    
-    // STRH R1, [R0]
-    0x01, 0x80, 
-    
-    // 2. Setup VRAM Pointers
-    // R0 = 0x06000000 (Start)
-    0x06, 0x20,
-    0x00, 0x06, // LSL R0, R0, #24
-    
-    // R1 = 0x06012C00 (End) (240 * 160 * 2 = 0x12C00 bytes)
-    // R1 = R0
-    0x01, 0x1C, // MOV R1, R0
-    // R2 = 0x12C00
-    // 0x9600 * 2 = 0x12C00. 
-    // Let's just use a counter or simpler end check.
-    // 240*160 = 38400 pixels.
-    // R3 = 38400 (0x9600)
-    0x96, 0x23, // MOV R3, #150 (approx 0x96) -> No, immediate 8-bit.
-    // Load via PC relative? Too complex.
-    // Let's just loop forever filling screen.
-    
-    // R2 = Color RED (0x001F)
-    0x1F, 0x22, 
-    
+#include <stdio.h>
+
+// ARM Code for Red Screen Fill
+unsigned char arm_code[] = {
+    // 1. Setup DISPCNT (0x04000000) = 0x0403 (Mode 3, BG2)
+    // MOV R0, #0x04000000
+    // (Value 1, ROR 6 -> 1 << 26 = 0x4000000? No. 1 ROR 8 = 01000000? No.)
+    // 0x04000000 = 1 << 26?
+    // 0x4000000  = 1 << 26.
+    // 0x04000000 = 1 << 26.
+    // 1 ROR 6 = (1 << 26). (32-6=26).
+    // Opcode: E3A00301 (Rot=3 -> 6).
+    0x01, 0x03, 0xA0, 0xE3, 
+
+    // MOV R1, #0x403
+    // MOV R1, #0x400
+    // 4 ROR 24 = 4 << 8 = 0x400. Rot=12 (0xC).
+    0x04, 0x1C, 0xA0, 0xE3,
+    // ORR R1, R1, #3
+    0x03, 0x10, 0x81, 0xE3,
+
+    // STR R1, [R0]
+    0x00, 0x10, 0x80, 0xE5,
+
+    // 2. Setup VRAM Fill
+    // MOV R0, #0x06000000
+    // 6 ROR 8 = 6 << 24. Rot=4.
+    0x06, 0x04, 0xA0, 0xE3,
+
+    // MOV R2, #0x001F (Red)
+    0x1F, 0x20, 0xA0, 0xE3,
+    // ORR R2, R2, R2, LSL #16 (Make it 0x001F001F)
+    0x02, 0x28, 0x82, 0xE1,
+
     // LOOP:
-    // STRH R2, [R0]
-    0x02, 0x80,
-    // ADD R0, #2
-    0x02, 0x30,
-    // B LOOP (Offset -4 bytes -> 0xFE)
-    0xFE, 0xE7
+    // STR R2, [R0], #4 (Post-increment)
+    0x04, 0x20, 0x80, 0xE4,
+    // B LOOP
+    // Offset calculation:
+    // PC is here + 8.
+    // Loop is at STR (-4 bytes).
+    // Target = PC + 8 + (off*4).
+    // -4 = +8 + off*4.
+    // -12 = off*4 -> off = -3. (0xFFFFFD)
+    0xFD, 0xFF, 0xFF, 0xEA
 };
 
 int main() {
   FILE *f = fopen("test.gba", "wb");
   if (!f) return 1;
 
-  fwrite(thumb_code, sizeof(thumb_code), 1, f);
-
-  // Pad to 4KB
-  for (int i = 0; i < 4096; i++) fputc(0, f);
-
+  fwrite(arm_code, sizeof(arm_code), 1, f);
+  for (int i = 0; i < 4096; i++) fputc(0, f); 
   fclose(f);
-  printf("test.gba (Red Screen) created.\n");
+  printf("test.gba (ARM Red) created.\n");
   return 0;
 }
