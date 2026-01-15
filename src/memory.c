@@ -217,6 +217,10 @@ void bus_write16(u32 addr, u16 value) {
   }
   if (addr >= 0x06000000 && addr <= 0x06017FFF) {
     u32 offset = addr - 0x06000000;
+    // printf("[VRAM] Write16: [%08X] = %04X\n", addr, value);
+    if (offset < 0x20) { // Log first few writes
+         printf("[VRAM] Write16: [%08X] = %04X\n", addr, value);
+    }
     *(u16 *)&vram[offset] = value;
     return;
   }
