@@ -157,6 +157,9 @@ u32 barrel_shift(u32 val, u8 shift_type, u8 amount, u32 *carry_out) {
 }
 
 void check_irq(ARM7TDMI *cpu) {
+  // Check CPSR I-bit (0x80). If set, IRQ disabled.
+  if (cpu->cpsr & 0x80) return;
+
   // Check IME (Interrupt Master Enable) - 0x04000208
   // We can't easily access IO directly without bus_read helper exposed or including global memory ptrs.
   // Using bus_read16 is safe.
@@ -202,13 +205,10 @@ int cpu_step_arm(ARM7TDMI *cpu);
 int cpu_step_thumb(ARM7TDMI *cpu);
 
 int cpu_step(ARM7TDMI *cpu) {
-  // Check Interrupts
-  if (!(cpu->cpsr & 0x80)) { // If I-bit is clear (IRQs enabled in CPSR)
-      check_irq(cpu);
-  }
+  check_irq(cpu);
 
-  //  // printf("Step. Thumb? %d\n", (cpu->cpsr & FLAG_T) ? 1 : 0);
-  if (cpu->cpsr & FLAG_T) {
+  u32 cpsr = cpu->cpsr;
+  if (cpsr & FLAG_T) {
     return cpu_step_thumb(cpu);
   } else {
     return cpu_step_arm(cpu);

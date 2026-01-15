@@ -414,30 +414,44 @@ static void perform_dma(int channel) {
         *(u16 *)&io[offset + 10] = new_ctrl;
     } else {
         *(u32 *)&io[offset] = src;
-        *(u32 *)&io[offset + 4] = dst;
+        // DAD reload logic depends on control bits (bits 5-6)
+        // Fixed (2) = DAD stays same. Reload (3) = DAD reloaded.
+        // If Repeat on, we should handle DAD/SAD writeback specifically.
+        // For Audio (Fixed Dest), DAD doesn't change implicitly in loop, but here we just restore?
+        // Let's assume standard behavior for now.
+    }
+    
+    // Trigger DMA IRQ if enabled (Bit 14)
+    if ((control_val >> 14) & 1) {
+        u16 *if_reg = (u16 *)&io[0x202];
+        *if_reg |= (1 << (8 + channel)); // DMA0=8, DMA1=9, DMA2=10, DMA3=11
     }
 }
 
 void check_dma(int channel, u16 control_val) {
-    // This signature matches existing call sites?
-    // Wait, original signature was `void check_dma(int channel, u16 control_val)`?
-    // Line 280 in previous View: `void check_dma(int channel, u16 control_val)`
-    // My previous replacement replaced `check_dma` with `static void perform_dma` inside it? No.
-    // I need to restore check_dma signature if it's called with 2 args.
-    // grep search for check_dma call sites?
-    // It's called from `bus_write16`.
-    
-    // u16 control_val is passed as argument.
-    // We can use it directly.
-    
-    // Debug print
-    // printf("DMA Check Ch%d Ctrl=%04X\n", channel, control_val);
-    
     bool enable = (control_val >> 15) & 1;
-    int timing = (control_val >> 12) & 3;
+    int timing = (control_val >> 12) & 3; // 0=Immediate, 1=VBlank, 2=HBlank, 3=Special/FIFO
     
-    if (enable && timing == 0) {
-        perform_dma(channel);
+    if (enable) {
+        if (timing == 0) {
+            perform_dma(channel);
+        } else if (timing == 3) {
+            // Audio DMA Check (Special Timing)
+            // Check Destination Address
+            u8 *io = memory_get_io();
+            u32 offset = 0xB0 + (channel * 12);
+            u32 dad = *(u32 *)&io[offset + 4];
+            
+            // FIFO A (0x040000A0) or FIFO B (0x040000A4)
+            // Note: DAD is usually written as physical address?
+            // IO regs are accessed via 0x04xxxxxx.
+            // But internal DAD register might hold just the offset? 
+            // perform_dma uses DAD as full address. So we check full address.
+            if (dad == 0x040000A0 || dad == 0x040000A4) {
+                 // printf("[DMA] Audio FIFO Detected Ch%d Dest=%08X. Forcing Run.\n", channel, dad);
+                 perform_dma(channel);
+            }
+        }
     }
 }
 
