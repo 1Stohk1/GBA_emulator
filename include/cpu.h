@@ -13,6 +13,12 @@ typedef struct {
   u32 cpsr; // Current Program Status Register
   u32 spsr; // Saved Program Status Register
 
+  // Banked Registers
+  // 0: User/System, 1: FIQ, 2: IRQ, 3: SVC, 4: ABT, 5: UND
+  u32 r13_bank[6];
+  u32 r14_bank[6];
+  u32 spsr_bank[6];
+
   // Pipeline simulation or internal state could go here
   bool pipeline_flushed;
 } ARM7TDMI;

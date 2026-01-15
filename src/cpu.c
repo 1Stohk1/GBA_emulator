@@ -6,9 +6,44 @@
 
 void cpu_init(ARM7TDMI *cpu) {
   memset(cpu, 0, sizeof(ARM7TDMI));
-  cpu->cpsr = 0x13;            // Supervisor mode
-  cpu->r[REG_PC] = 0x08000000; // Reset vector (ROM start)
-  // printf("CPU Initialized. PC at 0x%08X\n", cpu->r[REG_PC]);
+  cpu->cpsr = 0x1F;            // System mode (User mode registers) - Changed from 0x13
+  cpu->r[REG_PC] = 0x08000000; // Reset vector
+  // Banks zeroed by memset
+}
+
+int get_mode_index(u32 mode) {
+  switch (mode & 0x1F) {
+  case 0x10: return 0; // User
+  case 0x11: return 1; // FIQ
+  case 0x12: return 2; // IRQ
+  case 0x13: return 3; // SVC
+  case 0x17: return 4; // ABT
+  case 0x1B: return 5; // UND
+  case 0x1F: return 0; // System (Uses User Bank)
+  default: return 0;
+  }
+}
+
+void cpu_switch_mode(ARM7TDMI *cpu, u32 new_mode) {
+  u32 old_mode = cpu->cpsr & 0x1F;
+  if (old_mode == new_mode) return;
+
+  int old_idx = get_mode_index(old_mode);
+  int new_idx = get_mode_index(new_mode);
+
+  if (old_idx != new_idx) {
+    // Save Current
+    cpu->r13_bank[old_idx] = cpu->r[13];
+    cpu->r14_bank[old_idx] = cpu->r[14];
+    cpu->spsr_bank[old_idx] = cpu->spsr;
+
+    // Load New
+    cpu->r[13] = cpu->r13_bank[new_idx];
+    cpu->r[14] = cpu->r14_bank[new_idx];
+    cpu->spsr = cpu->spsr_bank[new_idx];
+  }
+
+  cpu->cpsr = (cpu->cpsr & ~0x1F) | new_mode;
 }
 
 // Check instruction condition
@@ -121,11 +156,57 @@ u32 barrel_shift(u32 val, u8 shift_type, u8 amount, u32 *carry_out) {
   return result;
 }
 
+void check_irq(ARM7TDMI *cpu) {
+  // Check IME (Interrupt Master Enable) - 0x04000208
+  // We can't easily access IO directly without bus_read helper exposed or including global memory ptrs.
+  // Using bus_read16 is safe.
+  u16 ime = bus_read16(0x04000208);
+  if (!(ime & 1)) return;
+
+  u16 ie = bus_read16(0x04000200);
+  u16 if_reg = bus_read16(0x04000202);
+
+  if (ie & if_reg) {
+    // IRQ Triggered
+    // printf("[CPU] IRQ Triggered! IE=%04X IF=%04X\n", ie, if_reg);
+    
+    u32 old_cpsr = cpu->cpsr;
+    u32 return_addr = cpu->r[REG_PC];
+    
+    // Adjust PC based on state (Pipeline)
+    // If Thumb, PC was +4 (next fetch), execute is +2.
+    // Standard Exception entry: LR = PC + 4 (ARM) or PC + 4 (Thumb)?
+    // Docs: IRQ/FIQ:
+    // ARM: LR = PC + 4
+    // Thumb: LR = PC + 4
+    // But our PC variable points to *currently fetching* address?
+    // In `cpu_step`, we haven't fetched yet. `pc` is the address of instruction to be executed next.
+    // So if we interrupt NOW, we want to return to `pc`.
+    // Exception return logic `SUBS PC, LR, #4`. So LR must be `return_addr + 4`.
+    
+    // Switch to IRQ Mode
+    cpu_switch_mode(cpu, 0x12); // IRQ Mode
+    
+    cpu->r[14] = return_addr + 4; // LR
+    cpu->spsr = old_cpsr;
+    
+    cpu->cpsr |= 0x80; // Disable IRQ
+    cpu->cpsr &= ~0x20; // Clear Thumb (Enter ARM)
+    
+    cpu->r[REG_PC] = 0x00000018; // Vector
+  }
+}
+
 // Forward declarations
 int cpu_step_arm(ARM7TDMI *cpu);
 int cpu_step_thumb(ARM7TDMI *cpu);
 
 int cpu_step(ARM7TDMI *cpu) {
+  // Check Interrupts
+  if (!(cpu->cpsr & 0x80)) { // If I-bit is clear (IRQs enabled in CPSR)
+      check_irq(cpu);
+  }
+
   //  // printf("Step. Thumb? %d\n", (cpu->cpsr & FLAG_T) ? 1 : 0);
   if (cpu->cpsr & FLAG_T) {
     return cpu_step_thumb(cpu);

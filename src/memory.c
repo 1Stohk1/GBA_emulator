@@ -224,14 +224,19 @@ void bus_write16(u32 addr, u16 value) {
     if (addr == 0x04000000) {
         printf("[IO] DISPCNT Write: %04X (Mode %d)\n", value, value & 7);
     }
-    *(u16 *)&io_regs[addr - 0x04000000] = value;
+    
+    // Interrupt Control Registers
+    u32 offset = addr - 0x04000000;
+    if (offset == 0x202) { // IF (Interrupt Request) - Write 1 to acknowledge/clear
+        u16 current_if = *(u16 *)&io_regs[0x202];
+        *(u16 *)&io_regs[0x202] = current_if & ~value;
+        // printf("[IO] IF Write: %04X -> Val %04X (Ack)\n", value, *(u16 *)&io_regs[0x202]);
+        return;
+    }
+    
+    *(u16 *)&io_regs[offset] = value;
     
     // Check for DMA Control Write (Offset 0xBA, 0xC6, 0xD2, 0xDE)
-    // DMA0CNT_H = 0xBA
-    // DMA1CNT_H = 0xC6
-    // DMA2CNT_H = 0xD2
-    // DMA3CNT_H = 0xDE
-    u32 offset = addr - 0x04000000;
     if (offset == 0xBA) check_dma(0, value);
     else if (offset == 0xC6) check_dma(1, value);
     else if (offset == 0xD2) check_dma(2, value);
