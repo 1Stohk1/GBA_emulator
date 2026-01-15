@@ -144,9 +144,13 @@ void swi_lz77_uncomp(ARM7TDMI *cpu, bool wram) {
                  // Byte 1: (Length_High | Disp_High)
                  // Byte 2: Disp_Low
                  
-                 int disp_high = b1 & 0xF;
-                 int length = (b1 >> 4) + 3;
-                 int disp_low = b2;
+                 // GBA Little Endian:
+                 // Byte 1 (b1) = Disp LSB
+                 // Byte 2 (b2) = Length | Disp MSB
+                 
+                 int length = (b2 >> 4) + 3;
+                 int disp_high = b2 & 0xF;
+                 int disp_low = b1;
                  int disp = (disp_high << 8) | disp_low;
                  
                  // Copy from (dst - disp - 1)

@@ -206,6 +206,27 @@ int cpu_step_thumb(ARM7TDMI *cpu);
 
 int cpu_step(ARM7TDMI *cpu) {
   check_irq(cpu);
+  
+  static u64 total_steps = 0;
+  total_steps++;
+  
+  /*
+  // Dump Loop Instructions (One-shot)
+  if (cpu->r[REG_PC] >= 0x08000D20 && cpu->r[REG_PC] <= 0x08000D50) {
+      static int dump_count = 0;
+      if (dump_count < 20) {
+          u16 instr = bus_read16(cpu->r[REG_PC]);
+          // printf("[LoopDump] PC=%08X Instr=%04X R0=%X R1=%X\n", cpu->r[REG_PC], instr, cpu->r[0], cpu->r[1]);
+          dump_count++;
+      }
+  }
+  */
+
+  /*
+  if (total_steps % 5000000 == 0) {
+      printf("[Trace] PC=%08X Mode=%02X\n", cpu->r[REG_PC], cpu->cpsr & 0x1F);
+  }
+  */
 
   u32 cpsr = cpu->cpsr;
   if (cpsr & FLAG_T) {
