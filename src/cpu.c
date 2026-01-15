@@ -158,11 +158,10 @@ u32 barrel_shift(u32 val, u8 shift_type, u8 amount, u32 *carry_out) {
 
 void check_irq(ARM7TDMI *cpu) {
   // Check CPSR I-bit (0x80). If set, IRQ disabled.
-  if (cpu->cpsr & 0x80) return;
-
-  // Check IME (Interrupt Master Enable) - 0x04000208
-  // We can't easily access IO directly without bus_read helper exposed or including global memory ptrs.
-  // Using bus_read16 is safe.
+  // Note: Even if IRQ is disabled in CPSR, Halt state might need to be broken?
+  // GBA: "If I-bit set, IRQ wakes up CPU but doesn't jump to vector."
+  // So we clear halted REGARDLESS of CPSR if IE & IF match.
+  
   u16 ime = bus_read16(0x04000208);
   if (!(ime & 1)) return;
 
@@ -170,6 +169,12 @@ void check_irq(ARM7TDMI *cpu) {
   u16 if_reg = bus_read16(0x04000202);
 
   if (ie & if_reg) {
+     // Wake up from Halt
+     cpu->halted = false;
+     
+     if (cpu->cpsr & 0x80) return; // IRQ Disabled in CPSR -> No Jump
+     
+     // Trigger IRQ context switch...
     // IRQ Triggered
     // printf("[CPU] IRQ Triggered! IE=%04X IF=%04X\n", ie, if_reg);
     
@@ -218,6 +223,13 @@ void check_hle_bios_vectors(ARM7TDMI *cpu) {
 int cpu_step(ARM7TDMI *cpu) {
   check_hle_bios_vectors(cpu); // Check before execute
   check_irq(cpu);
+  
+  if (cpu->halted) {
+      // CPU is halted, but system time must progress.
+      // Return small cycle count (e.g., 1 or 2) to allow PPU/Timers to tick.
+      // IRQ check above will clear halted if triggered.
+      return 2;
+  }
   
   static u64 total_steps = 0;
   total_steps++;

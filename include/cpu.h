@@ -21,6 +21,7 @@ typedef struct {
 
   // Pipeline simulation or internal state could go here
   bool pipeline_flushed;
+  bool halted; // Halt state (SWI 0x05 / 0x02)
 } ARM7TDMI;
 
 // Function prototypes

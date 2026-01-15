@@ -195,11 +195,13 @@ void swi_div(ARM7TDMI *cpu) {
 
 void swi_vblank_intr_wait(ARM7TDMI *cpu) {
     // 0x05: VBlankIntrWait
-    // Waits for VBlank Interrupt.
-    // In our HLE, we can just assume we are fast enough or just return.
-    // Ideally, we should yield execution, but for now, successful return.
-    // We should probably check IF/IE registers?
-    // Stub: do nothing, just return. (Game will loop if it needs to wait more)
+    // Explicitly halts the CPU until VBlank IRQ occurs.
+    cpu->halted = true;
+    
+    // Also, usually this function sets VBlank IRQ Enable in IE?
+    // GBA Bios does: IE |= 1 (VBlank).
+    u16 ie = bus_read16(0x04000200);
+    bus_write16(0x04000200, ie | 1);
 }
 
 void bios_handle_swi(ARM7TDMI *cpu, u8 swi_number) {
