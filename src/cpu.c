@@ -222,20 +222,7 @@ int cpu_step(ARM7TDMI *cpu) {
   static u64 total_steps = 0;
   total_steps++;
   
-  /*
-  // Dump Loop Instructions (One-shot)
-  // Range 08000D20 - 08000D60 (Extended)
-  /*
-  if (cpu->r[REG_PC] >= 0x08000D20 && cpu->r[REG_PC] <= 0x08000D60) {
-      static int dump_count = 0;
-      if (dump_count < 50) { // Increase count to capture full loop
-          u16 instr = bus_read16(cpu->r[REG_PC]);
-          // printf("[LoopDump] PC=%08X Instr=%04X R0=%X R12=%X SP=%X LR=%X\n", 
-          //       cpu->r[REG_PC], instr, cpu->r[0], cpu->r[12], cpu->r[13], cpu->r[14]);
-          dump_count++;
-      }
-  }
-  */
+
 
   /*
   if (total_steps % 5000000 == 0) {
