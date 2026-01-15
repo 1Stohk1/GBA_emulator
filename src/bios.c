@@ -101,7 +101,7 @@ void swi_lz77_uncomp(ARM7TDMI *cpu, bool wram) {
     }
     
     u32 decompressed_size = header >> 8;
-    // printf("[BIOS] LZ77UnComp%s Src=%08X Dst=%08X Size=%X\n", wram ? "Wram" : "Vram", src-4, dst, decompressed_size);
+    printf("[BIOS] LZ77UnComp%s Src=%08X Dst=%08X Size=%X\n", wram ? "Wram" : "Vram", src-4, dst, decompressed_size);
     
     u32 current_out_size = 0;
     

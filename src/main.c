@@ -166,7 +166,35 @@ int main(int argc, char *argv[]) {
 #else
     // Headless Render (Mock)
     ppu_update_texture(NULL); 
-    // printf("Frame executed. PC: %08X\n", cpu.r[REG_PC]);
+    
+    static int frame_count = 0;
+    frame_count++;
+    
+    // Save screenshot every 60 frames (1 second)
+    if (frame_count % 60 == 0) {
+        char filename[32];
+        sprintf(filename, "screenshot_%04d.ppm", frame_count);
+        ppu_save_screenshot(filename);
+        
+        // Diagnostic Log
+        u8 *io = memory_get_io();
+        u16 dispcnt = *(u16 *)&io[0];
+        u16 bg0cnt = *(u16 *)&io[0x08];
+        u16 bg1cnt = *(u16 *)&io[0x0A];
+        u16 bg2cnt = *(u16 *)&io[0x0C];
+        u16 bg3cnt = *(u16 *)&io[0x0E];
+        
+        printf("[Diag] Frame %d: DISPCNT=%04X (Mode %d) BG0=%04X BG1=%04X BG2=%04X BG3=%04X\n", 
+               frame_count, dispcnt, dispcnt & 7, bg0cnt, bg1cnt, bg2cnt, bg3cnt);
+               
+        // Check VRAM Usage (Simple Byte Count)
+        u8 *vram = memory_get_vram();
+        int non_zero = 0;
+        for(int i=0; i<0x18000; i++) {
+            if (vram[i] != 0) non_zero++;
+        }
+        printf("[Diag] VRAM Utilization: %d / 98304 bytes non-zero\n", non_zero);
+    }
 #endif
   }
 

@@ -204,7 +204,19 @@ void check_irq(ARM7TDMI *cpu) {
 int cpu_step_arm(ARM7TDMI *cpu);
 int cpu_step_thumb(ARM7TDMI *cpu);
 
+// HLE Vector Trap
+void check_hle_bios_vectors(ARM7TDMI *cpu) {
+    if (cpu->r[REG_PC] == 0x00000018) {
+        // IRQ Vector -> Jump to User Handler (IntrMain)
+        // Usually stored at 0x03007FFC
+        u32 handler = bus_read32(0x03007FFC);
+        cpu->r[REG_PC] = handler;
+        // printf("[BIOS] HLE IRQ Vector -> %08X\n", handler);
+    }
+}
+
 int cpu_step(ARM7TDMI *cpu) {
+  check_hle_bios_vectors(cpu); // Check before execute
   check_irq(cpu);
   
   static u64 total_steps = 0;
@@ -212,11 +224,14 @@ int cpu_step(ARM7TDMI *cpu) {
   
   /*
   // Dump Loop Instructions (One-shot)
-  if (cpu->r[REG_PC] >= 0x08000D20 && cpu->r[REG_PC] <= 0x08000D50) {
+  // Range 08000D20 - 08000D60 (Extended)
+  /*
+  if (cpu->r[REG_PC] >= 0x08000D20 && cpu->r[REG_PC] <= 0x08000D60) {
       static int dump_count = 0;
-      if (dump_count < 20) {
+      if (dump_count < 50) { // Increase count to capture full loop
           u16 instr = bus_read16(cpu->r[REG_PC]);
-          // printf("[LoopDump] PC=%08X Instr=%04X R0=%X R1=%X\n", cpu->r[REG_PC], instr, cpu->r[0], cpu->r[1]);
+          // printf("[LoopDump] PC=%08X Instr=%04X R0=%X R12=%X SP=%X LR=%X\n", 
+          //       cpu->r[REG_PC], instr, cpu->r[0], cpu->r[12], cpu->r[13], cpu->r[14]);
           dump_count++;
       }
   }

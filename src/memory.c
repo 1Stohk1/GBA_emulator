@@ -77,7 +77,8 @@ void timer_step(int cycles) {
 }
 
 void memory_init(void) {
-  memset(bios, 0, sizeof(bios));
+  memset(bios, 0xFF, sizeof(bios)); // Non-zero pattern
+  // memset(bios, 0, sizeof(bios));
   memset(wram_on_board, 0, sizeof(wram_on_board));
   memset(wram_on_chip, 0, sizeof(wram_on_chip));
   memset(wram_on_chip, 0, sizeof(wram_on_chip));
@@ -158,8 +159,16 @@ u32 bus_read32(u32 addr) {
     }
     return 0;
   }
-  return 0;
+  
+  // Backup Memory / Unmapped (SRAM/Flash often here)
+  if (addr >= 0x0E000000) {
+      // Return 0 or FF?
+      return 0xFFFFFFFF; 
+  }
+  
+  return 0; // Open Bus
 }
+
 
 u16 bus_read16(u32 addr) {
   // BIOS
