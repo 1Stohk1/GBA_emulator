@@ -1,0 +1,36 @@
+Starting GBA Emulator (Headless)
+Memory System Initialized.
+PPU Initialized.
+ROM Loaded: 16777216 bytes
+Direct Boot: PC=08000000, CPSR=0000001F, SP=03007F00
+[Trace] Executing 044A (BL) - Path B Taken!
+[Trace] Executing 0450. R1=00000001
+[Trace] Executing 044A (BL) - Path B Taken!
+[Trace] Executing 0450. R1=00000001
+[Trace] Executing 044A (BL) - Path B Taken!
+[Trace] Executing 0450. R1=00000001
+[Trace] Executing 044A (BL) - Path B Taken!
+[Trace] Executing 0450. R1=00000001
+[Trace] Executing 044A (BL) - Path B Taken!
+[Trace] Executing 0450. R1=00000001
+[Trace] Executing 044A (BL) - Path B Taken!
+[Trace] Executing 0450. R1=00000001
+[Trace] Executing 044A (BL) - Path B Taken!
+[Trace] Executing 0450. R1=00000001
+[Trace] Executing 044A (BL) - Path B Taken!
+[Trace] Executing 0450. R1=00000001
+[Trace] Executing 044A (BL) - Path B Taken!
+[Trace] Executing 0450. R1=00000001
+[Trace] Executing 044A (BL) - Path B Taken!
+[Trace] Executing 0450. R1=00000001
+Screenshot saved to screenshot_0060.ppm
+[Diag] Frame 60: DISPCNT=0000 (Mode 0) BG0=0000 BG1=0000 BG2=0000 BG3=0000
+[Diag] VRAM Utilization: 0 / 98304 bytes non-zero
+Screenshot saved to screenshot_0120.ppm
+[Diag] Frame 120: DISPCNT=0000 (Mode 0) BG0=0000 BG1=0000 BG2=0000 BG3=0000
+[Diag] VRAM Utilization: 0 / 98304 bytes non-zero
+Screenshot saved to screenshot_0180.ppm
+[Diag] Frame 180: DISPCNT=0000 (Mode 0) BG0=0000 BG1=0000 BG2=0000 BG3=0000
+[Diag] VRAM Utilization: 0 / 98304 bytes non-zero
+Screenshot saved to screenshot.ppm
+Emulation finished (Headless limit reached or Quit).

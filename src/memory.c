@@ -233,16 +233,27 @@ void bus_write32(u32 addr, u32 value) {
     *(u32 *)&wram_on_chip[addr - 0x03000000] = value;
     return;
   }
+  if (addr == 0x03001BCC) {
+      printf("[MemTrace] Write32 to VBlank Vector 1BCC: %08X\n", value);
+  }
+  // Also Trace 1BC0 base
+  if (addr >= 0x03001BC0 && addr <= 0x03001BD0) {
+      // printf("[MemTrace] Write32 to Vector Area %08X: %08X\n", addr, value);
+  }
   if (addr >= 0x04000000 && addr <= 0x040003FF) {
-      /*
-      // Debug IO Writes
-      u32 offset = addr - 0x04000000;
-      // Log DISPCNT (0), BGCNT (8, A, C, E)
-      if (offset == 0 || offset == 8 || offset == 0xA || offset == 0xC || offset == 0xE) {
-          printf("[IO] Write16: [%08X] = %04X\n", addr, value);
-      }
-      */
+      // Debug IO Writes: Log EVERYTHING in 04xxxxxx range for now
+      printf("[IO] Write32: [%08X] = %08X\n", addr, value);
       *(u32 *)&io_regs[addr - 0x04000000] = value;
+      
+      // Check for DMA Control Write (32-bit)
+      // DMAxCNT is at Offset B8, C4, D0, DC.
+      // Top 16 bits are Control.
+      u32 offset = addr - 0x04000000;
+      if (offset == 0xB8) check_dma(0, value >> 16);
+      else if (offset == 0xC4) check_dma(1, value >> 16);
+      else if (offset == 0xD0) check_dma(2, value >> 16);
+      else if (offset == 0xDC) check_dma(3, value >> 16);
+      
       return;
   }
   if (addr >= 0x05000000 && addr <= 0x050003FF) {
@@ -261,6 +272,7 @@ void bus_write32(u32 addr, u32 value) {
   // printf("[BUS] Write32: [%08X] = %08X\n", addr, value);
 }
 
+// Bus Write Functions
 void bus_write8(u32 addr, u8 value) {
   if (addr >= 0x02000000 && addr <= 0x0203FFFF) {
     wram_on_board[addr - 0x02000000] = value;
@@ -282,7 +294,6 @@ void bus_write8(u32 addr, u8 value) {
     vram[addr - 0x06000000] = value;
     return;
   }
-  // printf("[BUS] Write8: [%08X] = %02X\n", addr, value);
 }
 
 void bus_write16(u32 addr, u16 value) {
@@ -299,10 +310,72 @@ void bus_write16(u32 addr, u16 value) {
     *(u16 *)&vram[offset] = value;
     return;
   }
-  if (addr >= 0x04000000 && addr <= 0x040003FF) {
-    if (addr == 0x04000000) {
-        printf("[IO] DISPCNT Write: %04X (Mode %d)\n", value, value & 7);
+    wram_on_board[addr - 0x02000000] = value;
+    return;
+  }
+  if (addr >= 0x03000000 && addr <= 0x03007FFF) {
+    wram_on_chip[addr - 0x03000000] = value;
+    return;
+  }
+   if (addr >= 0x04000000 && addr <= 0x040003FF) {
+    io_regs[addr - 0x04000000] = value;
+    return;
+  }
+  if (addr >= 0x05000000 && addr <= 0x050003FF) {
+    pal_ram[addr - 0x05000000] = value;
+    return;
+  }
+  if (addr >= 0x06000000 && addr <= 0x06017FFF) {
+    vram[addr - 0x06000000] = value;
+    return;
+  }
+  if (addr == 0x03001BCC || (addr >= 0x03001BC0 && addr <= 0x03001BD0)) {
+      printf("[MemTrace8] Write8 to Vector Area %08X: %02X\n", addr, value);
+  }
+  // printf("[BUS] Write8: [%08X] = %02X\n", addr, value);
+}
+
+void bus_write16(u32 addr, u16 value) {
+  static int write16_log = 0;
+  if (write16_log < 1000) {
+      if (addr >= 0x02000000) {
+          printf("[BootWrite16] [%08X] = %04X\n", addr, value);
+          write16_log++;
+      }
+  }
+
+  if (addr >= 0x02000000 && addr <= 0x0203FFFF) {
+      *(u16 *)&wram_on_board[addr - 0x02000000] = value;
+      return;
+  }
+  if (addr >= 0x03000000 && addr <= 0x03007FFF) {
+      *(u16 *)&wram_on_chip[addr - 0x03000000] = value;
+      return;
+  }
+  if (addr >= 0x02000000 && addr <= 0x03FFFFFF) {
+      if ((value & 0xFF000000) == 0x08000000) {
+           printf("[MemTrace] Vector Write? PC=? [%08X] = %08X\n", addr, value);
+      }
+  }
+
+  if (addr >= 0x06000000 && addr <= 0x06017FFF) {
+    u32 offset = addr - 0x06000000;
+    *(u16 *)&vram[offset] = value;
+    
+    static int vram_log = 0;
+    if (vram_log < 500) {
+        printf("[VRAM] Write16 [%08X] = %04X\n", addr, value);
+        vram_log++;
     }
+    return;
+  }
+  if (addr >= 0x04000000 && addr <= 0x040003FF) {
+      // Log IO Write16
+      printf("[IO] Write16: [%08X] = %04X\n", addr, value);
+      
+      if (addr == 0x04000000) {
+         printf("[IO] DISPCNT Write: %04X (Mode %d)\n", value, value & 7);
+      }
     
     // Interrupt Control Registers
     u32 offset = addr - 0x04000000;
@@ -444,30 +517,27 @@ static void perform_dma(int channel) {
 
 void check_dma(int channel, u16 control_val) {
     bool enable = (control_val >> 15) & 1;
-    int timing = (control_val >> 12) & 3; // 0=Immediate, 1=VBlank, 2=HBlank, 3=Special/FIFO
+    int timing = (control_val >> 12) & 3; 
+    
+    // printf("[DMA] Check Ch%d Cnt=%04X En=%d Time=%d\n", channel, control_val, enable, timing);
     
     if (enable) {
         if (timing == 0) {
+            printf("[DMA] Immediate Trigger Ch%d\n", channel);
             perform_dma(channel);
         } else if (timing == 3) {
-            // Audio DMA Check (Special Timing)
-            // Check Destination Address
-            u8 *io = memory_get_io();
-            u32 offset = 0xB0 + (channel * 12);
-            u32 dad = *(u32 *)&io[offset + 4];
-            
-            // FIFO A (0x040000A0) or FIFO B (0x040000A4)
-            // Note: DAD is usually written as physical address?
-            // IO regs are accessed via 0x04xxxxxx.
-            // But internal DAD register might hold just the offset? 
-            // perform_dma uses DAD as full address. So we check full address.
-            if (dad == 0x040000A0 || dad == 0x040000A4) {
-                 // printf("[DMA] Audio FIFO Detected Ch%d Dest=%08X. Forcing Run.\n", channel, dad);
-                 perform_dma(channel);
-            }
+            // Audio Logic...
+             u8 *io = memory_get_io();
+             u32 offset = 0xB0 + (channel * 12);
+             u32 dad = *(u32 *)&io[offset + 4];
+             if (dad == 0x040000A0 || dad == 0x040000A4) {
+                  perform_dma(channel);
+             }
         }
     }
 }
+// Note: perform_dma logging:
+// static void perform_dma... (Need to modify earlier function)
 
 void memory_check_dma_vblank(void) {
     for (int i=0; i<4; i++) {
