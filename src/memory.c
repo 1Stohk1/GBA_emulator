@@ -305,127 +305,21 @@ void bus_write16(u32 addr, u16 value) {
       *(u16 *)&wram_on_chip[addr - 0x03000000] = value;
       return;
   }
-  if (addr >= 0x06000000 && addr <= 0x06017FFF) {
-    u32 offset = addr - 0x06000000;
-    *(u16 *)&vram[offset] = value;
-    return;
-  }
-    wram_on_board[addr - 0x02000000] = value;
-    return;
-  }
-  if (addr >= 0x03000000 && addr <= 0x03007FFF) {
-    wram_on_chip[addr - 0x03000000] = value;
-    return;
-  }
-   if (addr >= 0x04000000 && addr <= 0x040003FF) {
-    io_regs[addr - 0x04000000] = value;
-    return;
-  }
-  if (addr >= 0x05000000 && addr <= 0x050003FF) {
-    pal_ram[addr - 0x05000000] = value;
-    return;
-  }
-  if (addr >= 0x06000000 && addr <= 0x06017FFF) {
-    vram[addr - 0x06000000] = value;
-    return;
-  }
-  if (addr == 0x03001BCC || (addr >= 0x03001BC0 && addr <= 0x03001BD0)) {
-      printf("[MemTrace8] Write8 to Vector Area %08X: %02X\n", addr, value);
-  }
-  // printf("[BUS] Write8: [%08X] = %02X\n", addr, value);
-}
-
-void bus_write16(u32 addr, u16 value) {
-  static int write16_log = 0;
-  if (write16_log < 1000) {
-      if (addr >= 0x02000000) {
-          printf("[BootWrite16] [%08X] = %04X\n", addr, value);
-          write16_log++;
-      }
-  }
-
-  if (addr >= 0x02000000 && addr <= 0x0203FFFF) {
-      *(u16 *)&wram_on_board[addr - 0x02000000] = value;
-      return;
-  }
-  if (addr >= 0x03000000 && addr <= 0x03007FFF) {
-      *(u16 *)&wram_on_chip[addr - 0x03000000] = value;
-      return;
-  }
-  if (addr >= 0x02000000 && addr <= 0x03FFFFFF) {
-      if ((value & 0xFF000000) == 0x08000000) {
-           printf("[MemTrace] Vector Write? PC=? [%08X] = %08X\n", addr, value);
-      }
-  }
-
-  if (addr >= 0x06000000 && addr <= 0x06017FFF) {
-    u32 offset = addr - 0x06000000;
-    *(u16 *)&vram[offset] = value;
-    
-    static int vram_log = 0;
-    if (vram_log < 500) {
-        printf("[VRAM] Write16 [%08X] = %04X\n", addr, value);
-        vram_log++;
-    }
-    return;
-  }
   if (addr >= 0x04000000 && addr <= 0x040003FF) {
-      // Log IO Write16
-      printf("[IO] Write16: [%08X] = %04X\n", addr, value);
-      
-      if (addr == 0x04000000) {
-         printf("[IO] DISPCNT Write: %04X (Mode %d)\n", value, value & 7);
-      }
-    
-    // Interrupt Control Registers
-    u32 offset = addr - 0x04000000;
-    if (offset == 0x202) { // IF (Interrupt Request) - Write 1 to acknowledge/clear
-        u16 current_if = *(u16 *)&io_regs[0x202];
-        *(u16 *)&io_regs[0x202] = current_if & ~value;
-        // printf("[IO] IF Write: %04X -> Val %04X (Ack)\n", value, *(u16 *)&io_regs[0x202]);
-        return;
-    }
-    
-    // Timer Write Logic
-    if (offset >= 0x100 && offset <= 0x10E) {
-        int timer_idx = (offset - 0x100) / 4;
-        int is_cnt_h = (offset & 2); // 0=L (0, 4..), 2=H (2, 6..)
-        
-        if (!is_cnt_h) { // CNT_L (Reload Value)
-            timer_reload[timer_idx] = value;
-        } else { // CNT_H (Control)
-            u16 old_val = *(u16 *)&io_regs[offset];
-            bool old_start = (old_val >> 7) & 1;
-            bool new_start = (value >> 7) & 1;
-            
-            // If transitioning from Stop to Start, reload counter
-            if (!old_start && new_start) {
-                timer_counter[timer_idx] = timer_reload[timer_idx];
-                // printf("[Timer%d] Started. Reload=%04X\n", timer_idx, timer_reload[timer_idx]);
-            }
-        }
-    }
-    
-    *(u16 *)&io_regs[offset] = value;
-    
-    // Check for DMA Control Write (Offset 0xBA, 0xC6, 0xD2, 0xDE)
-    if (offset == 0xBA) check_dma(0, value);
-    else if (offset == 0xC6) check_dma(1, value);
-    else if (offset == 0xD2) check_dma(2, value);
-    else if (offset == 0xDE) check_dma(3, value);
-    
-    return;
+      *(u16 *)&io_regs[addr - 0x04000000] = value;
+      return;
   }
   if (addr >= 0x05000000 && addr <= 0x050003FF) {
-    *(u16 *)&pal_ram[addr - 0x05000000] = value;
+      *(u16 *)&pal_ram[addr - 0x05000000] = value;
+      return;
+  }
+  if (addr >= 0x06000000 && addr <= 0x06017FFF) {
+    u32 offset = addr - 0x06000000;
+    *(u16 *)&vram[offset] = value;
     return;
   }
-  if (addr >= 0x07000000 && addr <= 0x070003FF) {
-    *(u16 *)&oam[addr - 0x07000000] = value;
-    return;
-  }
-  // printf("[BUS] Write16: [%08X] = %04X\n", addr, value);
 }
+
 
 // Helpers
 u8 *memory_get_vram(void) { return vram; }
